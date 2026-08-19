@@ -86,16 +86,27 @@
   }
   .filters input[type="text"]{min-width:200px;flex:1;}
 
-  table{width:100%;border-collapse:collapse;font-size:12.8px;}
+  table{width:100%;border-collapse:collapse;font-size:12.8px;table-layout:fixed;}
   thead th{
     text-align:left;padding:11px 14px;background:#FAFBFD;color:var(--ink-soft);
     font-weight:600;font-size:11.3px;text-transform:uppercase;letter-spacing:.4px;
-    border-bottom:1px solid var(--line);white-space:nowrap;
+    border-bottom:1px solid var(--line);
   }
-  tbody td{padding:12px 14px;border-bottom:1px solid var(--line);color:var(--ink);white-space:nowrap;}
+  tbody td{padding:12px 14px;border-bottom:1px solid var(--line);color:var(--ink);word-wrap:break-word;overflow-wrap:break-word;}
   tbody tr{cursor:pointer;transition:.12s;}
   tbody tr:hover{background:var(--blue-100);}
   tbody tr:last-child td{border-bottom:none;}
+  thead th:nth-child(1){width:9%;}
+  thead th:nth-child(2){width:6%;}
+  thead th:nth-child(3){width:11%;}
+  thead th:nth-child(4){width:27%;}
+  thead th:nth-child(5){width:18%;}
+  thead th:nth-child(6){width:14%;}
+  thead th:nth-child(7){width:15%;}
+
+  .table-scroll::-webkit-scrollbar{height:8px;}
+  .table-scroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:8px;}
+  .table-scroll::-webkit-scrollbar-thumb:hover{background:var(--blue-100);}
 
   .chip{
     display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:100px;
@@ -288,6 +299,9 @@
       </select>
       <select id="f-gerencia" onchange="renderTabla()">
         <option value="">Gerencia: todas</option>
+      </select>
+      <select id="f-seguimiento" onchange="renderTabla()">
+        <option value="">Seguimiento: todos</option>
       </select>
     </div>
     <div class="table-scroll">
@@ -491,17 +505,25 @@ function renderTabla(){
   const tipo = document.getElementById('f-tipo').value;
   const estado = document.getElementById('f-estado').value;
   const gerencia = document.getElementById('f-gerencia').value;
+  const seguimiento = document.getElementById('f-seguimiento').value;
 
   const selGer = document.getElementById('f-gerencia');
-  const cur = selGer.value;
+  const curGer = selGer.value;
   const gs = [...new Set(hallazgos.map(h=>h.gerencia).filter(Boolean))];
   selGer.innerHTML = '<option value="">Gerencia: todas</option>' + gs.map(g=>`<option value="${g}">${g}</option>`).join('');
-  selGer.value = cur;
+  selGer.value = curGer;
+
+  const selSeg = document.getElementById('f-seguimiento');
+  const curSeg = selSeg.value;
+  const segs = [...new Set(hallazgos.map(h=>h.seguimientoPor).filter(Boolean))].sort();
+  selSeg.innerHTML = '<option value="">Seguimiento: todos</option>' + segs.map(s=>`<option value="${s}">${s}</option>`).join('');
+  selSeg.value = curSeg;
 
   const rows = hallazgos.filter(h=>{
     if(tipo && h.tipo!==tipo) return false;
     if(estado && h.estado!==estado) return false;
     if(gerencia && h.gerencia!==gerencia) return false;
+    if(seguimiento && h.seguimientoPor!==seguimiento) return false;
     if(q && !(`${h.codigo} ${h.jefe} ${h.unidad} ${h.responsable}`.toLowerCase().includes(q))) return false;
     return true;
   });
