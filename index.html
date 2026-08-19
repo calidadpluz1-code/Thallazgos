@@ -326,7 +326,7 @@
 <div class="overlay" id="overlay-registro">
   <div class="modal">
     <div class="modal-head">
-      <div><h3>Registrar hallazgo</h3><div class="sub">Datos generales del hallazgo de auditoría</div></div>
+      <div><h3 id="registro-titulo">Registrar hallazgo</h3><div class="sub">Datos generales del hallazgo de auditoría</div></div>
       <button class="modal-close" onclick="closeOverlay('overlay-registro')">✕</button>
     </div>
     <div class="modal-body">
@@ -369,7 +369,7 @@
       <div></div>
       <div class="right-actions">
         <button class="btn btn-ghost" onclick="closeOverlay('overlay-registro')">Cancelar</button>
-        <button class="btn btn-primary" onclick="saveRegistro()">Guardar hallazgo</button>
+        <button class="btn btn-primary" id="registro-btn-guardar" onclick="saveRegistro()">Guardar hallazgo</button>
       </div>
     </div>
   </div>
@@ -541,7 +541,7 @@ function renderTabla(){
     const stClass = stMap[h.estado] || 'st-evaluacion';
     return `
     <tr onclick="openEvalModal('${h.codigo}')">
-      <td><strong>${h.codigo}</strong></td>
+      <td><strong>${h.codigo}</strong> <button type="button" title="Editar datos generales" onclick="event.stopPropagation(); openEditHallazgoModal('${h.codigo}')" style="border:none;background:none;cursor:pointer;color:var(--ink-soft);font-size:12px;vertical-align:middle;">✏️</button></td>
       <td><span class="chip ${TIPO_CLASS[h.tipo]}">${h.tipo}</span></td>
       <td>${h.gerencia}</td>
       <td>${h.unidad}</td>
@@ -559,16 +559,57 @@ function fmtDate(d){
 }
 
 /* ================= MODAL: REGISTRO ================= */
-function openRegistroModal(){ document.getElementById('overlay-registro').classList.add('active'); }
+let editandoCodigo = null;
+
+function openRegistroModal(){
+  editandoCodigo = null;
+  document.getElementById('registro-titulo').textContent = 'Registrar hallazgo';
+  document.getElementById('registro-btn-guardar').textContent = 'Guardar hallazgo';
+  document.getElementById('r-codigo').disabled = false;
+  document.querySelectorAll('#overlay-registro input, #overlay-registro textarea').forEach(el=> el.value='');
+  document.getElementById('overlay-registro').classList.add('active');
+}
+
+function openEditHallazgoModal(codigo){
+  const h = hallazgos.find(x=>x.codigo===codigo);
+  if(!h) return;
+  editandoCodigo = codigo;
+  document.getElementById('registro-titulo').textContent = `Editar hallazgo — ${codigo}`;
+  document.getElementById('registro-btn-guardar').textContent = 'Guardar cambios';
+  document.getElementById('r-codigo').value = h.codigo;
+  document.getElementById('r-codigo').disabled = true; // el código no se cambia al editar
+  document.getElementById('r-tipo').value = h.tipo || 'NC';
+  document.getElementById('r-sociedad').value = h.sociedad || '';
+  document.getElementById('r-fecha').value = h.fecha || '';
+  document.getElementById('r-tipogerencia').value = h.tipoGerencia || 'Staff';
+  document.getElementById('r-gerencia').value = h.gerencia || '';
+  document.getElementById('r-jefe').value = h.jefe || '';
+  document.getElementById('r-unidad').value = h.unidad || '';
+  document.getElementById('r-acompano').value = h.acompano || '';
+  document.getElementById('r-alcance').value = h.alcance || 'PE';
+  document.getElementById('r-auditor').value = h.auditor || '';
+  document.getElementById('r-seguimiento').value = h.seguimientoPor || '';
+  document.getElementById('r-responsable').value = h.responsable || '';
+  document.getElementById('r-correo').value = h.correo || '';
+  document.getElementById('r-presentacion').value = h.presentacion || 'ok';
+  document.getElementById('r-keyword').value = h.keyword || '';
+  document.getElementById('r-iso').value = h.iso || '';
+  document.getElementById('r-puntonorma').value = h.puntoNorma || '';
+  document.getElementById('r-puntonivel1').value = h.puntoN1 || '';
+  document.getElementById('r-puntonivel2').value = h.puntoN2 || '';
+  document.getElementById('r-descripcion').value = h.descripcion || '';
+  document.getElementById('overlay-registro').classList.add('active');
+}
+
 function closeOverlay(id){ document.getElementById(id).classList.remove('active'); }
 
 async function saveRegistro(){
   const codigo = document.getElementById('r-codigo').value.trim();
   if(!codigo){ alert('Ingresa un código para el hallazgo.'); return; }
-  if(hallazgos.some(h=>h.codigo===codigo)){ alert('Ya existe un hallazgo con ese código.'); return; }
+  if(!editandoCodigo && hallazgos.some(h=>h.codigo===codigo)){ alert('Ya existe un hallazgo con ese código.'); return; }
   if(!document.getElementById('r-descripcion').value.trim()){ alert('La descripción del hallazgo es obligatoria — se usará en la evaluación y en la ficha.'); return; }
 
-  const nuevo = {
+  const datos = {
     codigo, tipo: document.getElementById('r-tipo').value,
     sociedad: document.getElementById('r-sociedad').value,
     fecha: document.getElementById('r-fecha').value,
@@ -590,18 +631,26 @@ async function saveRegistro(){
     puntoN1: document.getElementById('r-puntonivel1').value,
     puntoN2: document.getElementById('r-puntonivel2').value,
     descripcion: document.getElementById('r-descripcion').value,
-    estado: 'Pendiente'
   };
 
   const btn = event.target;
-  btn.disabled = true; btn.textContent = 'Guardando…';
+  btn.disabled = true; btn.textContent = editandoCodigo ? 'Guardando…' : 'Guardando…';
   try{
-    await postAppsScript('guardarHallazgo', nuevo);
-    hallazgos.push(nuevo);
+    if(editandoCodigo){
+      await postAppsScript('editarHallazgo', datos);
+      const h = hallazgos.find(x=>x.codigo===editandoCodigo);
+      Object.assign(h, datos);
+      showToast(`Hallazgo ${codigo} actualizado.`);
+    } else {
+      const nuevo = {...datos, estado: 'Pendiente'};
+      await postAppsScript('guardarHallazgo', nuevo);
+      hallazgos.push(nuevo);
+      showToast(`Hallazgo ${codigo} guardado en tu hoja de Google Sheets.`);
+    }
     closeOverlay('overlay-registro');
-    document.querySelectorAll('#overlay-registro input, #overlay-registro textarea').forEach(el=> el.value='');
+    document.getElementById('r-codigo').disabled = false;
+    editandoCodigo = null;
     renderTabla();
-    showToast(`Hallazgo ${codigo} guardado en tu hoja de Google Sheets.`);
   } catch(err){
     alert('No se pudo guardar en la hoja: '+err.message);
   } finally {
