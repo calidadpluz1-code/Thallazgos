@@ -261,6 +261,7 @@
     .modal-foot, .modal-close{display:none !important;}
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div class="app">
@@ -274,7 +275,11 @@
         <p>Sistema de Gestión Integrado · Auditorías internas</p>
       </div>
     </div>
-    <button class="btn btn-primary" onclick="openRegistroModal()">+ Registrar hallazgo</button>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span id="bienvenida-usuario" style="font-size:12.5px;color:var(--ink-soft);"></span>
+      <button class="btn btn-ghost btn-sm" onclick="cerrarSesion()">Salir</button>
+      <button class="btn btn-primary" onclick="openRegistroModal()">+ Registrar hallazgo</button>
+    </div>
   </div>
 
   <div class="panel-head">
@@ -282,6 +287,7 @@
       <h2>Hallazgos</h2>
       <p>Filtra la lista y haz clic en un hallazgo para abrir su tratamiento.</p>
     </div>
+    <button class="btn btn-ghost" onclick="generarReporte()">📊 Descargar reporte (Excel)</button>
   </div>
 
   <div class="card">
@@ -293,11 +299,13 @@
         <option value="OM">Oportunidad de mejora</option>
         <option value="OBS">Observación</option>
       </select>
+      <select id="f-sociedad" onchange="renderTabla()">
+        <option value="">Sociedad: todas</option>
+      </select>
       <select id="f-estado" onchange="renderTabla()">
         <option value="">Estado: todos</option>
-        <option value="Pendiente">Pendiente</option>
+        <option value="No iniciado">No iniciado</option>
         <option value="En evaluación">En evaluación</option>
-        <option value="Enviado">Enviado a responsable</option>
         <option value="Cerrado">Cerrado</option>
       </select>
       <select id="f-gerencia" onchange="renderTabla()">
@@ -415,6 +423,28 @@
   </div>
 </div>
 
+<!-- ===================== MODAL: LOGIN (control de acceso) ===================== -->
+<div class="overlay active" id="overlay-login" style="z-index:200;">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-head">
+      <div><h3>Acceso al sistema</h3><div class="sub">Ingresa tu código de trabajador</div></div>
+    </div>
+    <div class="modal-body">
+      <div class="field full">
+        <label>Código (Ej. PE00000)</label>
+        <input id="login-codigo" placeholder="PE00000" style="text-transform:uppercase;" onkeydown="if(event.key==='Enter') loginSubmit()">
+      </div>
+      <div id="login-error" style="display:none;color:var(--nc);font-size:12.5px;margin-top:4px;">Código no encontrado. Verifica con Calidad.</div>
+    </div>
+    <div class="modal-foot">
+      <div></div>
+      <div class="right-actions">
+        <button class="btn btn-primary" id="login-btn" onclick="loginSubmit()">Ingresar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -502,13 +532,39 @@ function decisionOM(t){
 let currentEvalCodigo = null;
 let currentEvalState = {};
 
+/* ================= ESTADO (con mapeo de compatibilidad para registros antiguos) ================= */
+function estadoDisplay(estado){
+  if(estado==='Pendiente') return 'No iniciado';
+  if(estado==='Enviado') return 'En evaluación';
+  return estado || 'No iniciado';
+}
+
 /* ================= RENDER TABLA ================= */
-function renderTabla(){
+function obtenerHallazgosFiltrados(){
   const q = (document.getElementById('f-search').value||'').toLowerCase();
   const tipo = document.getElementById('f-tipo').value;
+  const sociedad = document.getElementById('f-sociedad').value;
   const estado = document.getElementById('f-estado').value;
   const gerencia = document.getElementById('f-gerencia').value;
   const seguimiento = document.getElementById('f-seguimiento').value;
+
+  return hallazgos.filter(h=>{
+    if(tipo && h.tipo!==tipo) return false;
+    if(sociedad && h.sociedad!==sociedad) return false;
+    if(estado && estadoDisplay(h.estado)!==estado) return false;
+    if(gerencia && h.gerencia!==gerencia) return false;
+    if(seguimiento && h.seguimientoPor!==seguimiento) return false;
+    if(q && !(`${h.codigo} ${h.jefe} ${h.unidad} ${h.responsable}`.toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+
+function renderTabla(){
+  const selSoc = document.getElementById('f-sociedad');
+  const curSoc = selSoc.value;
+  const socs = [...new Set(hallazgos.map(h=>h.sociedad).filter(Boolean))].sort();
+  selSoc.innerHTML = '<option value="">Sociedad: todas</option>' + socs.map(s=>`<option value="${s}">${s}</option>`).join('');
+  selSoc.value = curSoc;
 
   const selGer = document.getElementById('f-gerencia');
   const curGer = selGer.value;
@@ -522,14 +578,7 @@ function renderTabla(){
   selSeg.innerHTML = '<option value="">Seguimiento: todos</option>' + segs.map(s=>`<option value="${s}">${s}</option>`).join('');
   selSeg.value = curSeg;
 
-  const rows = hallazgos.filter(h=>{
-    if(tipo && h.tipo!==tipo) return false;
-    if(estado && h.estado!==estado) return false;
-    if(gerencia && h.gerencia!==gerencia) return false;
-    if(seguimiento && h.seguimientoPor!==seguimiento) return false;
-    if(q && !(`${h.codigo} ${h.jefe} ${h.unidad} ${h.responsable}`.toLowerCase().includes(q))) return false;
-    return true;
-  });
+  const rows = obtenerHallazgosFiltrados();
 
   const tbody = document.getElementById('tabla-tbody');
   if(rows.length===0){
@@ -537,8 +586,9 @@ function renderTabla(){
     return;
   }
   tbody.innerHTML = rows.map(h=>{
-    const stMap = {'Pendiente':'st-pendiente','Cerrado':'st-cerrado','Enviado':'st-enviado'};
-    const stClass = stMap[h.estado] || 'st-evaluacion';
+    const estadoMostrado = estadoDisplay(h.estado);
+    const stMap = {'No iniciado':'st-pendiente','Cerrado':'st-cerrado'};
+    const stClass = stMap[estadoMostrado] || 'st-evaluacion';
     return `
     <tr onclick="openEvalModal('${h.codigo}')">
       <td><strong>${h.codigo}</strong> <button type="button" title="Editar datos generales" onclick="event.stopPropagation(); openEditHallazgoModal('${h.codigo}')" style="border:none;background:none;cursor:pointer;color:var(--ink-soft);font-size:12px;vertical-align:middle;">✏️</button></td>
@@ -547,7 +597,7 @@ function renderTabla(){
       <td>${h.unidad}</td>
       <td>${h.responsable}</td>
       <td style="text-align:center;">${h.seguimientoPor || '—'}</td>
-      <td><span class="status ${stClass}"><span class="dot"></span>${h.estado}</span></td>
+      <td><span class="status ${stClass}"><span class="dot"></span>${estadoMostrado}</span></td>
     </tr>`;
   }).join('');
 }
@@ -556,6 +606,34 @@ function fmtDate(d){
   if(!d) return '—';
   const [y,m,dd] = d.split('-');
   return `${dd}/${m}/${y}`;
+}
+
+/* ================= REPORTE (Excel) ================= */
+function generarReporte(){
+  const rows = obtenerHallazgosFiltrados();
+  if(rows.length===0){ alert('No hay hallazgos que coincidan con los filtros actuales para exportar.'); return; }
+  const filas = rows.map(h=>{
+    const ev = evaluaciones[h.codigo] || {};
+    const planes = ev.planes || [];
+    const acciones = planes.length
+      ? planes.map((p,i)=>`${i+1}. ${p.accion||'(sin descripción)'} | Resp: ${p.responsable||'-'} | Unidad: ${p.unidad||'-'} | Fecha: ${p.fecha||'-'} | Estado: ${p.estado||'Abierto'}`).join('\n')
+      : '—';
+    return {
+      'Código de Hallazgo': h.codigo,
+      'Tipo': TIPO_LABEL[h.tipo] || h.tipo,
+      'Sociedad': h.sociedad || '',
+      'Unidad Auditada': h.unidad || '',
+      'Descripción': h.descripcion || '',
+      'Estado': estadoDisplay(h.estado),
+      'Acciones': acciones
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(filas);
+  ws['!cols'] = [{wch:14},{wch:10},{wch:12},{wch:24},{wch:50},{wch:14},{wch:60}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
+  const fecha = new Date().toISOString().slice(0,10);
+  XLSX.writeFile(wb, `Reporte_Hallazgos_${fecha}.xlsx`);
 }
 
 /* ================= MODAL: REGISTRO ================= */
@@ -684,7 +762,7 @@ function ncForm(h, ev){
     currentEvalState.porques = [0,1,2,3,4].map(i => (ev.porques && ev.porques[i]) || {pregunta:'', respuesta:''});
   }
   if(!currentEvalState.planes || !currentEvalState.planes.length){
-    currentEvalState.planes = (ev.planes && ev.planes.length) ? ev.planes : [{accion:'',responsable:'',unidad:'',fecha:''},{accion:'',responsable:'',unidad:'',fecha:''},{accion:'',responsable:'',unidad:'',fecha:''}];
+    currentEvalState.planes = (ev.planes && ev.planes.length) ? ev.planes : [{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'},{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'},{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'}];
   }
   return `
     <div class="field full"><label>Descripción de la No Conformidad</label><div class="readonly-box">${h.descripcion || '<em>Sin descripción registrada</em>'}</div></div>
@@ -803,7 +881,7 @@ function updateGauge(tipo){
     currentEvalState.decisionLabel = null;
     currentEvalState.total = null;
     if(!currentEvalState.planes || !currentEvalState.planes.length){
-      currentEvalState.planes = [{accion:'',responsable:'',unidad:'',fecha:''},{accion:'',responsable:'',unidad:'',fecha:''},{accion:'',responsable:'',unidad:'',fecha:''}];
+      currentEvalState.planes = [{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'},{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'},{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'}];
     }
     renderPlanBlock('obs');
     return;
@@ -829,7 +907,7 @@ function updateGauge(tipo){
 
   if(d.requierePlan){
     if(!currentEvalState.planes || !currentEvalState.planes.length){
-      currentEvalState.planes = [{accion:'',responsable:'',unidad:'',fecha:''},{accion:'',responsable:'',unidad:'',fecha:''},{accion:'',responsable:'',unidad:'',fecha:''}];
+      currentEvalState.planes = [{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'},{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'},{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'}];
     }
     renderPlanBlock('om');
   } else {
@@ -849,7 +927,7 @@ function renderPlanBlock(modo){
     <div class="plan-box">
       ${modo!=='nc' ? `<div class="section-title" style="margin-top:0;"><span class="num" style="background:var(--blue-700);">✓</span>${tituloPlan}</div>` : ''}
       <table class="ficha-table" style="background:#fff;">
-        <tr><th style="width:6%;">N°</th><th>Acciones</th><th style="width:20%;">Responsable de ejecutar</th><th style="width:16%;">Unidad</th><th style="width:16%;">Fecha planificada</th></tr>
+        <tr><th style="width:5%;">N°</th><th>Acciones</th><th style="width:17%;">Responsable de ejecutar</th><th style="width:13%;">Unidad</th><th style="width:14%;">Fecha planificada</th><th style="width:13%;">Estado</th></tr>
         ${planes.map((p,i)=>`
           <tr>
             <td style="text-align:center;">${i+1}</td>
@@ -857,6 +935,7 @@ function renderPlanBlock(modo){
             <td><input style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%;font-size:12.5px;" value="${p.responsable||''}" oninput="updatePlanField(${i},'responsable',this.value)"></td>
             <td><input style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%;font-size:12.5px;" value="${p.unidad||''}" oninput="updatePlanField(${i},'unidad',this.value)"></td>
             <td><input type="date" style="border:1px solid var(--line);border-radius:6px;padding:6px 8px;width:100%;font-size:12.5px;" value="${p.fecha||''}" oninput="updatePlanField(${i},'fecha',this.value)"></td>
+            <td><select style="border:1px solid var(--line);border-radius:6px;padding:6px 4px;width:100%;font-size:12.5px;" onchange="updatePlanField(${i},'estado',this.value)">${sel(['Abierto','En proceso','Cerrado'],p.estado||'Abierto')}</select></td>
           </tr>`).join('')}
       </table>
       <button type="button" class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="addPlanRow()">+ Agregar acción</button>
@@ -892,7 +971,7 @@ function updatePlanField(i, field, value){
   currentEvalState.planes[i][field] = value;
 }
 function addPlanRow(){
-  currentEvalState.planes.push({accion:'',responsable:'',unidad:'',fecha:''});
+  currentEvalState.planes.push({accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'});
   renderPlanBlock(currentEvalState._planModo);
 }
 function toggleVerificacion(){
@@ -1013,8 +1092,8 @@ function fichaHTML(codigo){
           <div class="ficha-sec">
             <h5>Acciones a ejecutar</h5>
             <table class="ficha-table">
-              <tr><th style="width:6%;">N°</th><th>Acciones</th><th>Responsable de ejecutar</th><th>Unidad</th><th>Fecha planificada</th></tr>
-              ${planes.map((p,i)=>`<tr><td style="text-align:center;">${i+1}</td><td>${p.accion||'—'}</td><td>${p.responsable||'—'}</td><td>${p.unidad||'—'}</td><td>${fmtDate(p.fecha)}</td></tr>`).join('')}
+              <tr><th style="width:6%;">N°</th><th>Acciones</th><th>Responsable de ejecutar</th><th>Unidad</th><th>Fecha planificada</th><th>Estado</th></tr>
+              ${planes.map((p,i)=>`<tr><td style="text-align:center;">${i+1}</td><td>${p.accion||'—'}</td><td>${p.responsable||'—'}</td><td>${p.unidad||'—'}</td><td>${fmtDate(p.fecha)}</td><td>${p.estado||'—'}</td></tr>`).join('')}
             </table>
           </div>
           ${ev.verifDesc ? `
@@ -1075,8 +1154,8 @@ function fichaHTML(codigo){
         <div class="ficha-sec">
           <h5>${esOM ? 'Planes de acción' : 'Acciones'}</h5>
           <table class="ficha-table">
-            <tr><th style="width:6%;">N°</th><th>Acciones</th><th>Responsable de ejecutar</th><th>Unidad</th><th>Fecha planificada</th></tr>
-            ${planes.map((p,i)=>`<tr><td style="text-align:center;">${i+1}</td><td>${p.accion||'—'}</td><td>${p.responsable||'—'}</td><td>${p.unidad||'—'}</td><td>${fmtDate(p.fecha)}</td></tr>`).join('')}
+            <tr><th style="width:6%;">N°</th><th>Acciones</th><th>Responsable de ejecutar</th><th>Unidad</th><th>Fecha planificada</th><th>Estado</th></tr>
+            ${planes.map((p,i)=>`<tr><td style="text-align:center;">${i+1}</td><td>${p.accion||'—'}</td><td>${p.responsable||'—'}</td><td>${p.unidad||'—'}</td><td>${fmtDate(p.fecha)}</td><td>${p.estado||'—'}</td></tr>`).join('')}
           </table>
         </div>
         ${ev.verifDesc ? `
@@ -1127,10 +1206,8 @@ async function enviarFicha(){
   const htmlFicha = fichaHTMLDocumento(currentEvalCodigo);
   const asuntoSugerido = `${h.codigo} Tratamiento de Hallazgo - ${h.unidad||''}`;
   const cuerpoSugerido = 'Estimado, adjuntamos el tratamiento del hallazgo, favor de cumplir con las acciones comprometidas.';
-  const nuevoEstado = h.estado==='Cerrado' ? 'Cerrado' : 'Enviado';
   try{
-    await postAppsScript('enviarFicha', {codigo: h.codigo, unidad: h.unidad, responsable: h.responsable, correo: h.correo, htmlFicha, asuntoSugerido, cuerpoSugerido, nuevoEstado});
-    h.estado = nuevoEstado;
+    await postAppsScript('enviarFicha', {codigo: h.codigo, unidad: h.unidad, responsable: h.responsable, correo: h.correo, htmlFicha, asuntoSugerido, cuerpoSugerido});
     closeOverlay('overlay-ficha');
     closeOverlay('overlay-eval');
     renderTabla();
@@ -1147,8 +1224,55 @@ function showToast(msg){
   setTimeout(()=>t.classList.remove('show'), 5200);
 }
 
+/* ================= LOGIN / CONTROL DE ACCESO ================= */
+let usuarioActual = null;
+
+async function verificarYCargar(){
+  const codigoGuardado = localStorage.getItem('th_codigo_acceso');
+  if(codigoGuardado){
+    const ok = await intentarLogin(codigoGuardado, true);
+    if(ok) return;
+  }
+  document.getElementById('overlay-login').classList.add('active');
+  document.getElementById('login-codigo').focus();
+}
+
+async function intentarLogin(codigo, silencioso){
+  const btn = document.getElementById('login-btn');
+  if(!silencioso){ btn.disabled = true; btn.textContent = 'Verificando…'; }
+  try{
+    const res = await fetch(`${SHEETS_URL}?action=verificarAcceso&codigo=${encodeURIComponent(codigo)}`).then(r=>r.json());
+    if(res && res.ok){
+      usuarioActual = res;
+      localStorage.setItem('th_codigo_acceso', codigo);
+      document.getElementById('overlay-login').classList.remove('active');
+      document.getElementById('bienvenida-usuario').textContent = `${res.nombre} ${res.apellidos}`.trim();
+      cargarDatos();
+      return true;
+    }
+  } catch(e){ /* sigue abajo a mostrar error */ }
+  localStorage.removeItem('th_codigo_acceso');
+  if(!silencioso){
+    document.getElementById('login-error').style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Ingresar';
+  }
+  return false;
+}
+
+function loginSubmit(){
+  const codigo = document.getElementById('login-codigo').value.trim().toUpperCase();
+  document.getElementById('login-error').style.display = 'none';
+  if(!codigo) return;
+  intentarLogin(codigo, false);
+}
+
+function cerrarSesion(){
+  localStorage.removeItem('th_codigo_acceso');
+  location.reload();
+}
+
 /* ================= INIT ================= */
-cargarDatos();
+verificarYCargar();
 </script>
 </body>
 </html>
