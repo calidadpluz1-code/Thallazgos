@@ -70,6 +70,16 @@
   .btn-sm{padding:7px 12px;font-size:12.5px;}
   .btn:disabled{opacity:.45;cursor:not-allowed;}
 
+  .tabs-top{display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid var(--line);}
+  .tab-top-btn{
+    border:none;background:transparent;padding:10px 16px;font-family:'Inter';font-weight:600;
+    font-size:13.5px;color:var(--ink-soft);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;
+  }
+  .tab-top-btn:hover{color:var(--blue-700);}
+  .tab-top-btn.active{color:var(--blue-700);border-bottom-color:var(--blue-600);}
+  .gerencia-row{cursor:pointer;}
+  .gerencia-row:hover{background:var(--blue-100);}
+  .unidad-row td{background:#FAFBFD;color:var(--ink-soft);}
   .panel-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;}
   .panel-head h2{margin:0;font-size:20px;color:var(--blue-900);}
   .panel-head p{margin:4px 0 0;font-size:13px;color:var(--ink-soft);}
@@ -282,6 +292,12 @@
     </div>
   </div>
 
+  <div class="tabs-top">
+    <button class="tab-top-btn active" id="tab-btn-hallazgos" onclick="switchTab('hallazgos')">Hallazgos</button>
+    <button class="tab-top-btn" id="tab-btn-reporte" onclick="switchTab('reporte')">Reporte</button>
+  </div>
+
+  <div id="panel-hallazgos">
   <div class="panel-head">
     <div>
       <h2>Hallazgos</h2>
@@ -325,6 +341,52 @@
       </thead>
       <tbody id="tabla-tbody"></tbody>
     </table>
+    </div>
+  </div>
+  </div>
+
+  <div id="panel-reporte" style="display:none;">
+    <div class="panel-head">
+      <div>
+        <h2>Reporte</h2>
+        <p>Indicadores por estado y detalle de planes de acción por hallazgo.</p>
+      </div>
+    </div>
+
+    <div class="card" style="padding:16px 18px;margin-bottom:16px;">
+      <div class="filters" style="border:none;padding:0;">
+        <select id="rf-sociedad" onchange="renderReporte()"><option value="">Sociedad: todas</option></select>
+        <select id="rf-gerencia" onchange="renderReporte()"><option value="">Gerencia: todas</option></select>
+        <select id="rf-unidad" onchange="renderReporte()"><option value="">Unidad: todas</option></select>
+        <select id="rf-seguimiento" onchange="renderReporte()"><option value="">Responsable de seguimiento: todos</option></select>
+      </div>
+    </div>
+
+    <div class="card" style="padding:18px;margin-bottom:16px;">
+      <h3 style="margin:0 0 4px;font-size:15px;color:var(--blue-900);">Estado por gerencia</h3>
+      <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);">Clic en una gerencia para ver el detalle por unidad.</p>
+      <div class="table-scroll">
+        <table id="tabla-estado-gerencia">
+          <thead>
+            <tr><th>Gerencia / Unidad</th><th style="text-align:center;">No iniciado</th><th style="text-align:center;">En evaluación</th><th style="text-align:center;">Cerrado</th><th style="text-align:center;">Total</th></tr>
+          </thead>
+          <tbody id="tbody-estado-gerencia"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="padding:18px;">
+      <h3 style="margin:0 0 12px;font-size:15px;color:var(--blue-900);">Detalle por hallazgo</h3>
+      <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:18px;">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.3px;">Selecciona un hallazgo</label>
+          <select id="rf-hallazgo-select" size="14" style="width:100%;margin-top:6px;border:1px solid var(--line);border-radius:9px;padding:6px;font-size:12.5px;" onchange="mostrarPlanHallazgo()"></select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.3px;">Plan de acción</label>
+          <div id="detalle-plan-hallazgo" style="margin-top:6px;border:1px solid var(--line);border-radius:9px;padding:14px;font-size:12.5px;min-height:280px;color:var(--ink-soft);">Selecciona un hallazgo de la lista para ver sus acciones.</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -634,6 +696,146 @@ function generarReporte(){
   XLSX.utils.book_append_sheet(wb, ws, 'Reporte');
   const fecha = new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb, `Reporte_Hallazgos_${fecha}.xlsx`);
+}
+
+/* ================= PESTAÑAS SUPERIORES (Hallazgos / Reporte) ================= */
+function switchTab(tab){
+  document.getElementById('tab-btn-hallazgos').classList.toggle('active', tab==='hallazgos');
+  document.getElementById('tab-btn-reporte').classList.toggle('active', tab==='reporte');
+  document.getElementById('panel-hallazgos').style.display = tab==='hallazgos' ? '' : 'none';
+  document.getElementById('panel-reporte').style.display = tab==='reporte' ? '' : 'none';
+  if(tab==='reporte') renderReporte();
+}
+
+/* ================= REPORTE: filtros, indicador y detalle ================= */
+const gerenciasExpandidas = new Set();
+
+function obtenerHallazgosFiltradosReporte(){
+  const sociedad = document.getElementById('rf-sociedad').value;
+  const gerencia = document.getElementById('rf-gerencia').value;
+  const unidad = document.getElementById('rf-unidad').value;
+  const seguimiento = document.getElementById('rf-seguimiento').value;
+  return hallazgos.filter(h=>{
+    if(sociedad && h.sociedad!==sociedad) return false;
+    if(gerencia && h.gerencia!==gerencia) return false;
+    if(unidad && h.unidad!==unidad) return false;
+    if(seguimiento && h.seguimientoPor!==seguimiento) return false;
+    return true;
+  });
+}
+
+function poblarFiltrosReporte(){
+  const conservarYPoblar = (id, valores, etiqueta) => {
+    const sel = document.getElementById(id);
+    const actual = sel.value;
+    const opts = [...new Set(valores.filter(Boolean))].sort();
+    sel.innerHTML = `<option value="">${etiqueta}: todas</option>` + opts.map(v=>`<option value="${v}">${v}</option>`).join('');
+    sel.value = actual;
+  };
+  conservarYPoblar('rf-sociedad', hallazgos.map(h=>h.sociedad), 'Sociedad');
+  conservarYPoblar('rf-gerencia', hallazgos.map(h=>h.gerencia), 'Gerencia');
+  conservarYPoblar('rf-unidad', hallazgos.map(h=>h.unidad), 'Unidad');
+  const selSeg = document.getElementById('rf-seguimiento');
+  const actualSeg = selSeg.value;
+  const segs = [...new Set(hallazgos.map(h=>h.seguimientoPor).filter(Boolean))].sort();
+  selSeg.innerHTML = '<option value="">Responsable de seguimiento: todos</option>' + segs.map(s=>`<option value="${s}">${s}</option>`).join('');
+  selSeg.value = actualSeg;
+}
+
+function renderReporte(){
+  poblarFiltrosReporte();
+  const filtrados = obtenerHallazgosFiltradosReporte();
+
+  // ---- indicador: estado por gerencia, expandible por unidad ----
+  const porGerencia = {}; // { gerencia: { 'No iniciado':n, 'En evaluación':n, 'Cerrado':n, unidades:{unidad:{...}} } }
+  filtrados.forEach(h=>{
+    const ger = h.gerencia || 'Sin gerencia';
+    const uni = h.unidad || 'Sin unidad';
+    const est = estadoDisplay(h.estado);
+    if(!porGerencia[ger]) porGerencia[ger] = {'No iniciado':0,'En evaluación':0,'Cerrado':0, unidades:{}};
+    porGerencia[ger][est]++;
+    if(!porGerencia[ger].unidades[uni]) porGerencia[ger].unidades[uni] = {'No iniciado':0,'En evaluación':0,'Cerrado':0};
+    porGerencia[ger].unidades[uni][est]++;
+  });
+
+  const tbody = document.getElementById('tbody-estado-gerencia');
+  const gerenciasOrdenadas = Object.keys(porGerencia).sort();
+  if(gerenciasOrdenadas.length===0){
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">No hay hallazgos que coincidan con los filtros.</td></tr>`;
+  } else {
+    tbody.innerHTML = gerenciasOrdenadas.map(ger=>{
+      const g = porGerencia[ger];
+      const total = g['No iniciado'] + g['En evaluación'] + g['Cerrado'];
+      const abierta = gerenciasExpandidas.has(ger);
+      const filaGerencia = `
+        <tr class="gerencia-row" onclick="toggleGerencia('${ger.replace(/'/g,"\\'")}')">
+          <td><strong>${abierta ? '▾' : '▸'} ${ger}</strong></td>
+          <td style="text-align:center;">${g['No iniciado']}</td>
+          <td style="text-align:center;">${g['En evaluación']}</td>
+          <td style="text-align:center;">${g['Cerrado']}</td>
+          <td style="text-align:center;"><strong>${total}</strong></td>
+        </tr>`;
+      let filasUnidad = '';
+      if(abierta){
+        filasUnidad = Object.keys(g.unidades).sort().map(uni=>{
+          const u = g.unidades[uni];
+          const totalU = u['No iniciado'] + u['En evaluación'] + u['Cerrado'];
+          return `<tr class="unidad-row">
+            <td style="padding-left:28px;">${uni}</td>
+            <td style="text-align:center;">${u['No iniciado']}</td>
+            <td style="text-align:center;">${u['En evaluación']}</td>
+            <td style="text-align:center;">${u['Cerrado']}</td>
+            <td style="text-align:center;">${totalU}</td>
+          </tr>`;
+        }).join('');
+      }
+      return filaGerencia + filasUnidad;
+    }).join('');
+  }
+
+  // ---- listado de hallazgos para ver su plan de acción ----
+  const sel = document.getElementById('rf-hallazgo-select');
+  const actual = sel.value;
+  sel.innerHTML = filtrados.map(h=>`<option value="${h.codigo}">${h.codigo} — ${h.unidad || 'sin unidad'}</option>`).join('');
+  if(filtrados.some(h=>h.codigo===actual)) sel.value = actual;
+  mostrarPlanHallazgo();
+}
+
+function toggleGerencia(ger){
+  if(gerenciasExpandidas.has(ger)) gerenciasExpandidas.delete(ger);
+  else gerenciasExpandidas.add(ger);
+  renderReporte();
+}
+
+function mostrarPlanHallazgo(){
+  const codigo = document.getElementById('rf-hallazgo-select').value;
+  const cont = document.getElementById('detalle-plan-hallazgo');
+  if(!codigo){
+    cont.innerHTML = 'Selecciona un hallazgo de la lista para ver sus acciones.';
+    cont.style.color = 'var(--ink-soft)';
+    return;
+  }
+  const h = hallazgos.find(x=>x.codigo===codigo);
+  const ev = evaluaciones[codigo] || {};
+  const planes = ev.planes || [];
+  cont.style.color = 'var(--ink)';
+  let html = `<div style="margin-bottom:10px;"><strong>${h.codigo}</strong> · ${TIPO_LABEL[h.tipo]||h.tipo} · ${h.unidad||'—'}<br><span style="color:var(--ink-soft);">Estado: ${estadoDisplay(h.estado)}</span></div>`;
+  if(!planes.length){
+    html += `<div style="color:var(--ink-soft);">Este hallazgo todavía no tiene planes de acción registrados.</div>`;
+  } else {
+    html += `<table class="ficha-table" style="width:100%;">
+      <tr><th>N°</th><th>Acción</th><th>Responsable</th><th>Unidad</th><th>Fecha</th><th>Estado</th></tr>
+      ${planes.map((p,i)=>`<tr>
+        <td style="text-align:center;">${i+1}</td>
+        <td>${p.accion||'—'}</td>
+        <td>${p.responsable||'—'}</td>
+        <td>${p.unidad||'—'}</td>
+        <td>${fmtDate(p.fecha)}</td>
+        <td>${p.estado||'Abierto'}</td>
+      </tr>`).join('')}
+    </table>`;
+  }
+  cont.innerHTML = html;
 }
 
 /* ================= MODAL: REGISTRO ================= */
@@ -1228,31 +1430,29 @@ function showToast(msg){
 let usuarioActual = null;
 
 async function verificarYCargar(){
-  const codigoGuardado = localStorage.getItem('th_codigo_acceso');
-  if(codigoGuardado){
-    const ok = await intentarLogin(codigoGuardado, true);
-    if(ok) return;
-  }
   document.getElementById('overlay-login').classList.add('active');
   document.getElementById('login-codigo').focus();
 }
 
 async function intentarLogin(codigo, silencioso){
   const btn = document.getElementById('login-btn');
+  if(!codigo){
+    if(!silencioso){ document.getElementById('login-error').style.display = 'block'; }
+    return false;
+  }
   if(!silencioso){ btn.disabled = true; btn.textContent = 'Verificando…'; }
   try{
     const res = await fetch(`${SHEETS_URL}?action=verificarAcceso&codigo=${encodeURIComponent(codigo)}`).then(r=>r.json());
     if(res && res.ok){
       usuarioActual = res;
-      localStorage.setItem('th_codigo_acceso', codigo);
       document.getElementById('overlay-login').classList.remove('active');
       document.getElementById('bienvenida-usuario').textContent = `${res.nombre} ${res.apellidos}`.trim();
       cargarDatos();
       return true;
     }
   } catch(e){ /* sigue abajo a mostrar error */ }
-  localStorage.removeItem('th_codigo_acceso');
   if(!silencioso){
+    document.getElementById('login-error').textContent = 'Código no encontrado. Verifica con Calidad.';
     document.getElementById('login-error').style.display = 'block';
     btn.disabled = false; btn.textContent = 'Ingresar';
   }
@@ -1262,12 +1462,15 @@ async function intentarLogin(codigo, silencioso){
 function loginSubmit(){
   const codigo = document.getElementById('login-codigo').value.trim().toUpperCase();
   document.getElementById('login-error').style.display = 'none';
-  if(!codigo) return;
+  if(!codigo){
+    document.getElementById('login-error').textContent = 'Ingresa tu código.';
+    document.getElementById('login-error').style.display = 'block';
+    return;
+  }
   intentarLogin(codigo, false);
 }
 
 function cerrarSesion(){
-  localStorage.removeItem('th_codigo_acceso');
   location.reload();
 }
 
