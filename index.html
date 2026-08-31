@@ -81,6 +81,35 @@
   .gerencia-row:hover{background:var(--blue-100);}
   .unidad-row td{background:#FAFBFD;color:var(--ink-soft);}
   .panel-head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;}
+
+  .report-hero{
+    background:linear-gradient(135deg,var(--blue-600),var(--blue-900));
+    border-radius:16px;padding:18px 22px;box-shadow:0 10px 26px rgba(44,68,137,.28);
+    margin-bottom:18px;position:relative;overflow:hidden;
+  }
+  .report-hero::after{
+    content:'';position:absolute;top:-40px;right:-40px;width:130px;height:130px;
+    background:rgba(255,255,255,.08);border-radius:50%;
+  }
+  .report-hero .hero-title{color:#fff;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;opacity:.85;margin-bottom:10px;}
+  .report-hero .filters{background:transparent;border:none;padding:0;position:relative;z-index:1;}
+  .report-hero .filters select{
+    background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.4);color:#fff;
+    font-weight:600;
+  }
+  .report-hero .filters select option{color:var(--ink);background:#fff;}
+
+  .report-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .report-card{background:var(--surface);border-radius:14px;box-shadow:var(--shadow);padding:18px 20px;}
+  .report-card h3{margin:0 0 4px;font-size:14.5px;color:var(--blue-900);font-family:'Sora';}
+  .report-card p.sub{margin:0 0 14px;font-size:11.5px;color:var(--ink-soft);}
+  .report-card table{font-size:12.3px;}
+  .report-card thead th{background:#FAFBFD;font-size:10.3px;}
+  .chip-mini{
+    display:inline-block;padding:2px 8px;border-radius:100px;font-size:10.5px;font-weight:700;
+  }
+  .mini-bar-track{background:#EEF0F5;border-radius:100px;height:6px;overflow:hidden;margin-top:5px;width:100%;}
+  .mini-bar-fill{height:100%;border-radius:100px;}
   .panel-head h2{margin:0;font-size:20px;color:var(--blue-900);}
   .panel-head p{margin:4px 0 0;font-size:13px;color:var(--ink-soft);}
 
@@ -303,7 +332,6 @@
       <h2>Hallazgos</h2>
       <p>Filtra la lista y haz clic en un hallazgo para abrir su tratamiento.</p>
     </div>
-    <button class="btn btn-ghost" onclick="generarReporte()">📊 Descargar reporte (Excel)</button>
   </div>
 
   <div class="card">
@@ -349,12 +377,14 @@
     <div class="panel-head">
       <div>
         <h2>Reporte</h2>
-        <p>Indicadores por estado y detalle de planes de acción por hallazgo.</p>
+        <p>Indicadores por gerencia y detalle de planes de acción.</p>
       </div>
+      <button class="btn btn-ghost" onclick="generarReporte()">📊 Descargar reporte (Excel)</button>
     </div>
 
-    <div class="card" style="padding:16px 18px;margin-bottom:16px;">
-      <div class="filters" style="border:none;padding:0;">
+    <div class="report-hero">
+      <div class="hero-title">Filtros del reporte</div>
+      <div class="filters">
         <select id="rf-sociedad" onchange="renderReporte()"><option value="">Sociedad: todas</option></select>
         <select id="rf-gerencia" onchange="renderReporte()"><option value="">Gerencia: todas</option></select>
         <select id="rf-unidad" onchange="renderReporte()"><option value="">Unidad: todas</option></select>
@@ -362,24 +392,58 @@
       </div>
     </div>
 
-    <div class="card" style="padding:18px;margin-bottom:16px;">
-      <h3 style="margin:0 0 4px;font-size:15px;color:var(--blue-900);">Estado por gerencia</h3>
-      <p style="margin:0 0 14px;font-size:12px;color:var(--ink-soft);">Clic en una gerencia para ver el detalle por unidad.</p>
-      <div class="table-scroll">
-        <table id="tabla-estado-gerencia">
-          <thead>
-            <tr><th>Gerencia / Unidad</th><th style="text-align:center;">No iniciado</th><th style="text-align:center;">En evaluación</th><th style="text-align:center;">Cerrado</th><th style="text-align:center;">Total</th></tr>
-          </thead>
-          <tbody id="tbody-estado-gerencia"></tbody>
-        </table>
+    <div class="report-grid">
+      <div class="report-card">
+        <h3>Tipo de hallazgo por gerencia</h3>
+        <p class="sub">Clic en una gerencia para ver el detalle por unidad.</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Gerencia / Unidad</th><th style="text-align:center;">NC</th><th style="text-align:center;">OM</th><th style="text-align:center;">OBS</th><th style="text-align:center;">Total</th></tr></thead>
+            <tbody id="tbody-tipo-gerencia"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="report-card">
+        <h3>Estado por gerencia</h3>
+        <p class="sub">Clic en una gerencia para ver el detalle por unidad.</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Gerencia / Unidad</th><th style="text-align:center;">No iniciado</th><th style="text-align:center;">En eval.</th><th style="text-align:center;">Cerrado</th><th style="text-align:center;">Total</th></tr></thead>
+            <tbody id="tbody-estado-gerencia"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="report-card">
+        <h3>Oportunidades de mejora — decisión por gerencia</h3>
+        <p class="sub">Solo hallazgos tipo OM ya evaluados.</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Gerencia</th><th style="text-align:center;">Implementar</th><th style="text-align:center;">Impl. voluntariamente</th><th style="text-align:center;">No implementar</th><th style="text-align:center;">Sin evaluar</th></tr></thead>
+            <tbody id="tbody-om-gerencia"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="report-card">
+        <h3>Detalle de hallazgos</h3>
+        <p class="sub">Según los filtros de arriba.</p>
+        <div class="table-scroll" style="max-height:320px;overflow-y:auto;">
+          <table>
+            <thead><tr><th>Tipo</th><th>Descripción</th><th>Responsable</th><th>Estado</th><th>Seguimiento</th></tr></thead>
+            <tbody id="tbody-detalle-hallazgos"></tbody>
+          </table>
+        </div>
       </div>
     </div>
 
-    <div class="card" style="padding:18px;">
-      <h3 style="margin:0 0 12px;font-size:15px;color:var(--blue-900);">Detalle por hallazgo</h3>
+    <div class="report-card" style="margin-top:16px;">
+      <h3>Plan de acción por hallazgo</h3>
+      <p class="sub">Selecciona un hallazgo para ver su plan de acción completo.</p>
       <div style="display:grid;grid-template-columns:1fr 1.4fr;gap:18px;">
         <div>
-          <label style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.3px;">Selecciona un hallazgo</label>
+          <label style="font-size:11px;font-weight:700;color:var(--ink-soft);text-transform:uppercase;letter-spacing:.3px;">Hallazgo</label>
           <select id="rf-hallazgo-select" size="14" style="width:100%;margin-top:6px;border:1px solid var(--line);border-radius:9px;padding:6px;font-size:12.5px;" onchange="mostrarPlanHallazgo()"></select>
         </div>
         <div>
@@ -708,7 +772,6 @@ function switchTab(tab){
 }
 
 /* ================= REPORTE: filtros, indicador y detalle ================= */
-const gerenciasExpandidas = new Set();
 
 function obtenerHallazgosFiltradosReporte(){
   const sociedad = document.getElementById('rf-sociedad').value;
@@ -746,52 +809,14 @@ function renderReporte(){
   poblarFiltrosReporte();
   const filtrados = obtenerHallazgosFiltradosReporte();
 
-  // ---- indicador: estado por gerencia, expandible por unidad ----
-  const porGerencia = {}; // { gerencia: { 'No iniciado':n, 'En evaluación':n, 'Cerrado':n, unidades:{unidad:{...}} } }
-  filtrados.forEach(h=>{
-    const ger = h.gerencia || 'Sin gerencia';
-    const uni = h.unidad || 'Sin unidad';
-    const est = estadoDisplay(h.estado);
-    if(!porGerencia[ger]) porGerencia[ger] = {'No iniciado':0,'En evaluación':0,'Cerrado':0, unidades:{}};
-    porGerencia[ger][est]++;
-    if(!porGerencia[ger].unidades[uni]) porGerencia[ger].unidades[uni] = {'No iniciado':0,'En evaluación':0,'Cerrado':0};
-    porGerencia[ger].unidades[uni][est]++;
-  });
+  renderTablaGerenciaExpandible('tbody-tipo-gerencia', filtrados, 'tipo', gerenciasExpandidasTipo,
+    h=>TIPO_LABEL_CORTO[h.tipo] || h.tipo, ['NC','OM','OBS'], 'toggleGerenciaTipo');
 
-  const tbody = document.getElementById('tbody-estado-gerencia');
-  const gerenciasOrdenadas = Object.keys(porGerencia).sort();
-  if(gerenciasOrdenadas.length===0){
-    tbody.innerHTML = `<tr><td colspan="5" class="empty">No hay hallazgos que coincidan con los filtros.</td></tr>`;
-  } else {
-    tbody.innerHTML = gerenciasOrdenadas.map(ger=>{
-      const g = porGerencia[ger];
-      const total = g['No iniciado'] + g['En evaluación'] + g['Cerrado'];
-      const abierta = gerenciasExpandidas.has(ger);
-      const filaGerencia = `
-        <tr class="gerencia-row" onclick="toggleGerencia('${ger.replace(/'/g,"\\'")}')">
-          <td><strong>${abierta ? '▾' : '▸'} ${ger}</strong></td>
-          <td style="text-align:center;">${g['No iniciado']}</td>
-          <td style="text-align:center;">${g['En evaluación']}</td>
-          <td style="text-align:center;">${g['Cerrado']}</td>
-          <td style="text-align:center;"><strong>${total}</strong></td>
-        </tr>`;
-      let filasUnidad = '';
-      if(abierta){
-        filasUnidad = Object.keys(g.unidades).sort().map(uni=>{
-          const u = g.unidades[uni];
-          const totalU = u['No iniciado'] + u['En evaluación'] + u['Cerrado'];
-          return `<tr class="unidad-row">
-            <td style="padding-left:28px;">${uni}</td>
-            <td style="text-align:center;">${u['No iniciado']}</td>
-            <td style="text-align:center;">${u['En evaluación']}</td>
-            <td style="text-align:center;">${u['Cerrado']}</td>
-            <td style="text-align:center;">${totalU}</td>
-          </tr>`;
-        }).join('');
-      }
-      return filaGerencia + filasUnidad;
-    }).join('');
-  }
+  renderTablaGerenciaExpandible('tbody-estado-gerencia', filtrados, 'estado', gerenciasExpandidasEstado,
+    h=>estadoDisplay(h.estado), ['No iniciado','En evaluación','Cerrado'], 'toggleGerenciaEstado');
+
+  renderOMPorGerencia(filtrados);
+  renderDetalleHallazgos(filtrados);
 
   // ---- listado de hallazgos para ver su plan de acción ----
   const sel = document.getElementById('rf-hallazgo-select');
@@ -801,10 +826,123 @@ function renderReporte(){
   mostrarPlanHallazgo();
 }
 
-function toggleGerencia(ger){
-  if(gerenciasExpandidas.has(ger)) gerenciasExpandidas.delete(ger);
-  else gerenciasExpandidas.add(ger);
+const TIPO_LABEL_CORTO = {NC:'NC', OM:'OM', OBS:'OBS'};
+const gerenciasExpandidasTipo = new Set();
+const gerenciasExpandidasEstado = new Set();
+
+// Función genérica: agrupa hallazgos por gerencia > unidad, contando cuántos caen en cada
+// categoría (columnas), con fila de gerencia clicable para expandir el detalle por unidad.
+function renderTablaGerenciaExpandible(idTbody, filtrados, campoFn_o_str, setExpandido, getCategoria, categorias, nombreToggleFn){
+  const porGerencia = {};
+  filtrados.forEach(h=>{
+    const ger = h.gerencia || 'Sin gerencia';
+    const uni = h.unidad || 'Sin unidad';
+    const cat = getCategoria(h);
+    if(!porGerencia[ger]){
+      porGerencia[ger] = {unidades:{}};
+      categorias.forEach(c=>porGerencia[ger][c]=0);
+    }
+    porGerencia[ger][cat] = (porGerencia[ger][cat]||0) + 1;
+    if(!porGerencia[ger].unidades[uni]){
+      porGerencia[ger].unidades[uni] = {};
+      categorias.forEach(c=>porGerencia[ger].unidades[uni][c]=0);
+    }
+    porGerencia[ger].unidades[uni][cat] = (porGerencia[ger].unidades[uni][cat]||0) + 1;
+  });
+
+  const tbody = document.getElementById(idTbody);
+  const gerenciasOrdenadas = Object.keys(porGerencia).sort();
+  if(gerenciasOrdenadas.length===0){
+    tbody.innerHTML = `<tr><td colspan="${categorias.length+2}" class="empty">Sin datos para los filtros actuales.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = gerenciasOrdenadas.map(ger=>{
+    const g = porGerencia[ger];
+    const total = categorias.reduce((a,c)=>a+g[c],0);
+    const abierta = setExpandido.has(ger);
+    const gerEsc = ger.replace(/'/g,"\\'");
+    const filaGerencia = `
+      <tr class="gerencia-row" onclick="${nombreToggleFn}('${gerEsc}')">
+        <td><strong>${abierta ? '▾' : '▸'} ${ger}</strong></td>
+        ${categorias.map(c=>`<td style="text-align:center;">${g[c]}</td>`).join('')}
+        <td style="text-align:center;"><strong>${total}</strong></td>
+      </tr>`;
+    let filasUnidad = '';
+    if(abierta){
+      filasUnidad = Object.keys(g.unidades).sort().map(uni=>{
+        const u = g.unidades[uni];
+        const totalU = categorias.reduce((a,c)=>a+u[c],0);
+        return `<tr class="unidad-row">
+          <td style="padding-left:28px;">${uni}</td>
+          ${categorias.map(c=>`<td style="text-align:center;">${u[c]}</td>`).join('')}
+          <td style="text-align:center;">${totalU}</td>
+        </tr>`;
+      }).join('');
+    }
+    return filaGerencia + filasUnidad;
+  }).join('');
+}
+
+function toggleGerenciaTipo(ger){
+  if(gerenciasExpandidasTipo.has(ger)) gerenciasExpandidasTipo.delete(ger); else gerenciasExpandidasTipo.add(ger);
   renderReporte();
+}
+function toggleGerenciaEstado(ger){
+  if(gerenciasExpandidasEstado.has(ger)) gerenciasExpandidasEstado.delete(ger); else gerenciasExpandidasEstado.add(ger);
+  renderReporte();
+}
+
+// Decisión de OM agrupada en 3 categorías + "Sin evaluar", por gerencia (sin expandir por unidad).
+function renderOMPorGerencia(filtrados){
+  const omHallazgos = filtrados.filter(h=>h.tipo==='OM');
+  const porGerencia = {};
+  omHallazgos.forEach(h=>{
+    const ger = h.gerencia || 'Sin gerencia';
+    if(!porGerencia[ger]) porGerencia[ger] = {'Implementar':0,'Implementar voluntariamente':0,'No Implementar':0,'Sin evaluar':0};
+    const ev = evaluaciones[h.codigo];
+    const decision = ev ? ev.decisionLabel : null;
+    let bucket = 'Sin evaluar';
+    if(decision==='Implementar con prioridad' || decision==='Implementar') bucket = 'Implementar';
+    else if(decision==='Implementar voluntariamente') bucket = 'Implementar voluntariamente';
+    else if(decision==='No Implementar') bucket = 'No Implementar';
+    porGerencia[ger][bucket]++;
+  });
+
+  const tbody = document.getElementById('tbody-om-gerencia');
+  const gerencias = Object.keys(porGerencia).sort();
+  if(gerencias.length===0){
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">No hay hallazgos de Oportunidad de Mejora para los filtros actuales.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = gerencias.map(ger=>{
+    const g = porGerencia[ger];
+    return `<tr>
+      <td><strong>${ger}</strong></td>
+      <td style="text-align:center;"><span class="chip-mini" style="background:var(--om-bg);color:var(--om);">${g['Implementar']}</span></td>
+      <td style="text-align:center;"><span class="chip-mini" style="background:#FFF7E3;color:#8A6A15;">${g['Implementar voluntariamente']}</span></td>
+      <td style="text-align:center;"><span class="chip-mini" style="background:var(--nc-bg);color:var(--nc);">${g['No Implementar']}</span></td>
+      <td style="text-align:center;color:var(--ink-soft);">${g['Sin evaluar']}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Tabla de detalle: Tipo, Descripción, Responsable, Estado, Seguimiento — una fila por hallazgo filtrado.
+function renderDetalleHallazgos(filtrados){
+  const tbody = document.getElementById('tbody-detalle-hallazgos');
+  if(filtrados.length===0){
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">No hay hallazgos que coincidan con los filtros.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtrados.map(h=>{
+    const desc = (h.descripcion||'').length>70 ? h.descripcion.slice(0,70)+'…' : (h.descripcion||'—');
+    return `<tr>
+      <td><span class="chip ${TIPO_CLASS[h.tipo]}">${h.tipo}</span></td>
+      <td title="${(h.descripcion||'').replace(/"/g,'&quot;')}">${desc}</td>
+      <td>${h.responsable||'—'}</td>
+      <td>${estadoDisplay(h.estado)}</td>
+      <td>${h.seguimientoPor||'—'}</td>
+    </tr>`;
+  }).join('');
 }
 
 function mostrarPlanHallazgo(){
