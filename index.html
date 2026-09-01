@@ -619,7 +619,8 @@ function mapEvalDesdeSheet(ev){
     viabilidad: ev['Recurso']?String(ev['Recurso']):'',
     total: ev['Puntaje total'], decisionLabel: ev['Decisión'],
     verifDesc: ev['Verif Desc'], verifResponsable: ev['Verif Resp'],
-    verifFecha2: normalizaFecha(ev['Verif Fecha']), verifCierre2: ev['Verif Cierre']
+    verifFecha2: normalizaFecha(ev['Verif Fecha']), verifCierre2: ev['Verif Cierre'],
+    comentarioNoImplementar: ev['Comentario No Implementar'] || ''
   };
 }
 
@@ -1250,11 +1251,19 @@ function updateGauge(tipo){
     if(!currentEvalState.planes || !currentEvalState.planes.length){
       currentEvalState.planes = [{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'},{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'},{accion:'',responsable:'',unidad:'',fecha:'',estado:'Abierto'}];
     }
+    currentEvalState.comentarioNoImplementar = '';
     renderPlanBlock('om');
   } else {
-    // No requiere nada más: sin planes de acción, sin mensajes — listo para guardar/enviar directo
+    // No requiere plan de acción, pero sí una justificación de por qué no se implementa
     currentEvalState.planes = [];
-    planContainer.innerHTML = '';
+    planContainer.innerHTML = `
+      <div class="plan-box" style="background:var(--nc-bg);border-color:var(--nc);">
+        <div class="section-title" style="margin-top:0;"><span class="num" style="background:var(--nc);">!</span>Justificación</div>
+        <div class="field full">
+          <label>¿Por qué no se implementa esta oportunidad de mejora?</label>
+          <textarea id="e-comentarioNoImplementar" oninput="currentEvalState.comentarioNoImplementar=this.value" placeholder="Explica brevemente el motivo...">${currentEvalState.comentarioNoImplementar||''}</textarea>
+        </div>
+      </div>`;
   }
 }
 
@@ -1491,7 +1500,12 @@ function fichaHTML(codigo){
         <div class="ficha-sec">
           <h5>Resultado</h5>
           <div class="ficha-desc">Puntaje total: <b>${ev.total||'—'} / ${criteria.length*5}</b> — <span class="ficha-decision" style="background:${d.color}">${ev.decisionLabel||'—'}</span></div>
-        </div>` : ''}
+        </div>
+        ${ev.decisionLabel==='No Implementar' && ev.comentarioNoImplementar ? `
+        <div class="ficha-sec">
+          <h5>Justificación</h5>
+          <div class="ficha-desc">${ev.comentarioNoImplementar}</div>
+        </div>` : ''}` : ''}
         <div class="ficha-sec">
           <h5>${esOM ? 'Planes de acción' : 'Acciones'}</h5>
           <table class="ficha-table">
